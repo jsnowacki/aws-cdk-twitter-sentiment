@@ -36,7 +36,12 @@ export class InfrastructureStack extends cdk.Stack {
       }
     });
 
-    const twitterSecret = secretsmanager.Secret.fromSecretName(this, 'SecretFromName', infrastructureProps.twitterApiSecretName);
+    const twitterSecretArn = cdk.Stack.of(this).formatArn({
+      service: 'secretsmanager',
+      resource: 'secret',
+      sep: ':',
+      resourceName: infrastructureProps.twitterApiSecretName + '*'
+    });
 
     twitterLambdaFunction.addToRolePolicy(new iam.PolicyStatement({
       actions: [
@@ -46,7 +51,7 @@ export class InfrastructureStack extends cdk.Stack {
         "secretsmanager:ListSecretVersionIds",
       ],
       resources: [
-        twitterSecret.secretArn
+        twitterSecretArn
       ],
     }));
 
