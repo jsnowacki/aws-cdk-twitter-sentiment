@@ -1,12 +1,14 @@
 import * as cdk from '@aws-cdk/core';
+import * as events from '@aws-cdk/aws-events';
+import * as targets from '@aws-cdk/aws-events-targets';
 import * as iam from '@aws-cdk/aws-iam';
 import * as lambda from '@aws-cdk/aws-lambda';
-import * as secretsmanager from '@aws-cdk/aws-secretsmanager';
 
 
 interface InfrastructureProps {
   baseStackName: string,
   twitterApiSecretName: string,
+  twitterApiCallMinutes: number,
 }
 
 
@@ -55,6 +57,11 @@ export class InfrastructureStack extends cdk.Stack {
       ],
     }));
 
+    const rule = new events.Rule(this, 'Rule', {
+      schedule: events.Schedule.rate(cdk.Duration.minutes(infrastructureProps.twitterApiCallMinutes))
+    });
+
+    rule.addTarget(new targets.LambdaFunction(twitterLambdaFunction))
 
   }
 }

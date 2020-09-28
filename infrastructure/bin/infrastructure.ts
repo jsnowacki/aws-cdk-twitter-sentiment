@@ -9,4 +9,5 @@ const app = new cdk.App();
 new InfrastructureStack(app, baseStackName, {
     baseStackName,
     twitterApiSecretName: "TwitterAPIKeys",
+    twitterApiCallMinutes: 1,
 });
