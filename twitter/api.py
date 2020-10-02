@@ -7,6 +7,7 @@ from botocore.exceptions import ClientError
 from dataclasses import dataclass
 
 import tweepy
+import datetime
 
 
 @dataclass
@@ -38,4 +39,3 @@ def get_tweepy_api(secret: TwitterApiSecret) -> tweepy.API:
     auth.set_access_token(secret.access_token, secret.access_token_secret)
 
     return tweepy.API(auth)
-    
