@@ -18,7 +18,7 @@ export class InfrastructureStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, infrastructureProps: InfrastructureProps, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // S3 bucket for Twitts   
+    // S3 bucket for Tweets
     const destinationS3Bucket = new s3.Bucket(this, 'DestinationBucket', {
       bucketName: infrastructureProps.baseStackName + '-raw',
       removalPolicy: cdk.RemovalPolicy.DESTROY,

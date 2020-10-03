@@ -1,6 +1,5 @@
 import os
 import json
-import base64
 import boto3
 from typing import Iterable, List
 
@@ -16,8 +15,9 @@ _secret = get_secret(SECRET_NAME)
 _api = get_tweepy_api(_secret)
 
 def to_firehose_records(tweets: Iterable[Status]) -> List[bytes]:
+    # You need to add newline at the end as firehose will put it in one line otherwise
     return [
-        {'Data': base64.b64encode(json.dumps(tweet._json).encode('utf-8'))}
+        {'Data': f"{json.dumps(tweet._json)}\n".encode('utf-8')}
         for tweet in tweets
     ]
 
