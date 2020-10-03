@@ -1,0 +1,5 @@
+pandas==1.1.2
+matplotlib==3.3.2
+jupyterlab==2.2.8
+boto3==1.14.44
+s3fs==0.5.1
