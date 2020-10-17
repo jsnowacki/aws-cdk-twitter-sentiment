@@ -1,13 +1,13 @@
 #!/use/bin/env python
-import json
-
-import boto3
 import base64
-from botocore.exceptions import ClientError
+import datetime
+import json
+import time
 from dataclasses import dataclass
 
+import boto3
 import tweepy
-import datetime
+from botocore.exceptions import ClientError
 
 
 @dataclass
@@ -39,3 +39,11 @@ def get_tweepy_api(secret: TwitterApiSecret) -> tweepy.API:
     auth.set_access_token(secret.access_token, secret.access_token_secret)
 
     return tweepy.API(auth)
+
+
+if __name__ == "__main__":
+    secret = get_secret('TwitterAPIKeys')
+    api = get_tweepy_api(secret)
+    tweets = api.home_timeline(tweet_mode='extended')
+    for tweet in tweets:
+        print(f"{json.dumps(tweet._json)}")
