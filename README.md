@@ -48,7 +48,7 @@ All code elements have `requirements.txt` and sometimes `requirements_dev.txt`, 
 ```bash
 cd twitter
 # dev will instal both deployment and development requirements
-pip install -r requirements_dev.txt
+pip install -r requirements-dev.txt
 ```
 
 Most of the testing is done in [pytest](https://docs.pytest.org/en/stable/), which is installed with the appropriate requirements file.
