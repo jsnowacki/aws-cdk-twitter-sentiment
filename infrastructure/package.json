@@ -23,9 +23,11 @@
   "dependencies": {
     "@aws-cdk/aws-events": "^1.64.1",
     "@aws-cdk/aws-events-targets": "^1.64.1",
+    "@aws-cdk/aws-glue": "^1.64.1",
     "@aws-cdk/aws-kinesisfirehose": "^1.64.1",
     "@aws-cdk/aws-lambda": "^1.64.1",
     "@aws-cdk/aws-s3": "^1.64.1",
+    "@aws-cdk/aws-s3-deployment": "^1.64.1",
     "@aws-cdk/core": "^1.64.1",
     "source-map-support": "^0.5.16"
   }

@@ -10,4 +10,6 @@ new InfrastructureStack(app, baseStackName, {
     baseStackName,
     twitterApiSecretName: "TwitterAPIKeys",
     twitterApiCallMinutes: 1,
+    glueDatabaseName: "twitter",
+    glueTableName: "tweets_clean",
 });

@@ -3,9 +3,9 @@ from pyspark.sql import DataFrame
 import pyspark.sql.functions as F
 
 def transform_tweets(tweets: DataFrame) -> DataFrame:
-    # "Sat Oct 17 18:30:09 +0000 2020"
     result = tweets.select([
         'id', 
+        # Example date format "Sat Oct 17 18:30:09 +0000 2020"
         F.to_timestamp('created_at', 'EEE MMM dd HH:mm:ss +0000 yyyy').alias('created_at'), 
         'full_text', 
         'lang'

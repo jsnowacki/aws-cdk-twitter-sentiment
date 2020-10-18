@@ -1,16 +1,21 @@
 import * as cdk from '@aws-cdk/core';
 import * as events from '@aws-cdk/aws-events';
 import * as targets from '@aws-cdk/aws-events-targets';
+import * as glue from '@aws-cdk/aws-glue';
 import * as iam from '@aws-cdk/aws-iam';
 import * as lambda from '@aws-cdk/aws-lambda';
 import * as kinesisfirehose from '@aws-cdk/aws-kinesisfirehose';
 import * as s3 from '@aws-cdk/aws-s3';
+import * as s3deploy from '@aws-cdk/aws-s3-deployment';
 
+import {TWEETS_TABLE_COLUMNS, TWEETS_TABLE_PARTITION_KEYS} from "./glue-table-meta"
 
 interface InfrastructureProps {
   baseStackName: string,
   twitterApiSecretName: string,
   twitterApiCallMinutes: number,
+  glueDatabaseName: string,
+  glueTableName: string,
 }
 
 
@@ -143,5 +148,111 @@ export class InfrastructureStack extends cdk.Stack {
       ],
     }));
 
+    // Glue
+
+    const jobArtifactsS3Bucket = new s3.Bucket(this, 'jobArtifactsBucket', {
+      bucketName: infrastructureProps.baseStackName + '-artifacts',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    new s3deploy.BucketDeployment(this, 'DeploySparkJobCode', {
+      sources: [s3deploy.Source.asset('../spark_job', { exclude: ['**', '!*.py'] })],
+      destinationBucket: jobArtifactsS3Bucket,
+      retainOnDelete: false,
+    });
+    
+
+    const glueDatabase = new glue.Database(this, infrastructureProps.glueDatabaseName, {
+      databaseName: infrastructureProps.glueDatabaseName
+    });
+
+    const glueTable = new glue.Table(this, infrastructureProps.glueTableName, {
+      database: glueDatabase,
+      tableName: infrastructureProps.glueTableName,
+      description: 'Simple Tweets',
+      columns: TWEETS_TABLE_COLUMNS,
+      partitionKeys: TWEETS_TABLE_PARTITION_KEYS,
+      dataFormat: glue.DataFormat.PARQUET,
+      storedAsSubDirectories: true,
+      compressed: false,
+    });
+
+    const roleForGlueJob = new iam.Role(this, 'glueJobRule', {
+      assumedBy: new iam.ServicePrincipal("glue.amazonaws.com"),
+      inlinePolicies: {
+          "root": new iam.PolicyDocument({
+              statements: [
+                  new iam.PolicyStatement({
+                      actions: [
+                          "s3:GetObject",
+                          "s3:ListBucket",
+                          "s3:GetObjectVersion"
+                      ],
+                      resources: [
+                        destinationS3Bucket.bucketArn,
+                        destinationS3Bucket.bucketArn + "/*",
+                      ]
+                  }),
+                  new iam.PolicyStatement({
+                      actions: [
+                        "glue:GetConnection",
+                        "glue:GetDatabase",
+                        "glue:GetTable",
+                        "glue:GetPartition",
+                        "glue:CreatePartition",
+                        "glue:DeletePartition"
+                      ],
+                      resources: [glueTable.tableArn]
+                  }),
+                  new iam.PolicyStatement({
+                    actions: [
+                      "s3:GetObject",
+                      "s3:PutObject",
+                      "s3:ListBucket",
+                      "s3:DeleteObject",
+                      "s3:DeleteObjectVersion",
+                      "s3:GetObjectVersion"
+                    ],
+                    resources: [
+                      glueTable.bucket.bucketArn,
+                      glueTable.bucket.bucketArn + "/*", 
+                      jobArtifactsS3Bucket.bucketArn,
+                      jobArtifactsS3Bucket.bucketArn + "/*",
+                    ]
+                })
+              ]
+          })
+      },
+      managedPolicies: [
+          iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSGlueServiceRole")
+      ]
+  });
+
+
+  const glueJob = new glue.CfnJob(this, 'glueJob', {
+      name: this.stackName,
+          command: {
+              name: "glueetl",
+              scriptLocation: jobArtifactsS3Bucket.s3UrlForObject('job.py'),
+          },
+          defaultArguments: {
+              "--job-bookmark-option": "job-bookmark-disable",
+              "--job-language": "python",
+              "--enable-continuous-cloudwatch-log": "true",
+              "--enable-continuous-log-filter": "true",
+              "--enable-metrics": "true",
+              "--input_s3": `s3://${destinationS3Bucket.s3UrlForObject}/`,
+              "--glue_database": infrastructureProps.glueTableName,
+              "--redshiftConnectionSecretId": infrastructureProps.glueTableName,
+          },
+          executionProperty: {
+              maxConcurrentRuns: 2
+          },
+          maxRetries: 0,
+          maxCapacity: 2,
+          glueVersion: "2.0",
+          role: roleForGlueJob.roleArn
+        });
+        
   }
 }
