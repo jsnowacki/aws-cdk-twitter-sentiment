@@ -241,9 +241,10 @@ export class InfrastructureStack extends cdk.Stack {
               "--enable-continuous-cloudwatch-log": "true",
               "--enable-continuous-log-filter": "true",
               "--enable-metrics": "true",
-              "--input_s3": `s3://${destinationS3Bucket.s3UrlForObject}/`,
-              "--glue_database": infrastructureProps.glueTableName,
-              "--redshiftConnectionSecretId": infrastructureProps.glueTableName,
+              "--extra-py-files": jobArtifactsS3Bucket.s3UrlForObject('transform.py'),
+              "--input_s3": destinationS3Bucket.s3UrlForObject(),
+              "--glue_database": infrastructureProps.glueDatabaseName,
+              "--glue_table": infrastructureProps.glueTableName,
           },
           executionProperty: {
               maxConcurrentRuns: 2

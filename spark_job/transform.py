@@ -12,7 +12,8 @@ def transform_tweets(tweets: DataFrame) -> DataFrame:
         ])\
         .withColumn('year', F.year('created_at'))\
         .withColumn('month', F.month('created_at'))\
-        .withColumn('day', F.dayofmonth('created_at'))
+        .withColumn('day', F.dayofmonth('created_at'))\
+        .withColumn('hour', F.hour('created_at'))
 
     return result
 
