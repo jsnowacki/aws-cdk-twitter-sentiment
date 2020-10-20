@@ -226,10 +226,10 @@ export class InfrastructureStack extends cdk.Stack {
       managedPolicies: [
           iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSGlueServiceRole")
       ]
-  });
+    });
 
 
-  const glueJob = new glue.CfnJob(this, 'glueJob', {
+    const glueJob = new glue.CfnJob(this, 'glueJob', {
       name: this.stackName,
           command: {
               name: "glueetl",
@@ -254,6 +254,40 @@ export class InfrastructureStack extends cdk.Stack {
           glueVersion: "2.0",
           role: roleForGlueJob.roleArn
         });
-        
+     
+
+    // Crawler
+    const crawlerRole = new iam.Role(this, `twitter-crawler-role`, {
+      assumedBy: new iam.ServicePrincipal('glue.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSGlueServiceRole")
+      ]
+    });
+
+    crawlerRole.addToPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["s3:GetObject", "s3:PutObject"],
+      resources: [`${glueTable.bucket.bucketArn}/*`]
+    }));
+
+    const crawlerName = `${glueDatabase.databaseName}-crawler`
+    const crawler = new glue.CfnCrawler(this, `twitter-crawler`, {
+      name: crawlerName,
+      role: crawlerRole.roleArn,
+      targets: {
+        catalogTargets: [
+          {
+            databaseName: glueDatabase.databaseName,
+            tables: [glueTable.tableName],
+          }
+        ]
+      },
+      schemaChangePolicy: {
+        updateBehavior: "UPDATE_IN_DATABASE",
+        deleteBehavior: "LOG"
+      },
+      configuration: "{\"Version\":1.0,\"CrawlerOutput\":{\"Partitions\":{\"AddOrUpdateBehavior\":\"InheritFromTable\"}},\"Grouping\":{\"TableGroupingPolicy\":\"CombineCompatibleSchemas\"}}"
+    });
+
   }
 }
