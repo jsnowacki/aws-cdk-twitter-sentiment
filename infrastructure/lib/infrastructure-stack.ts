@@ -7,6 +7,8 @@ import * as lambda from '@aws-cdk/aws-lambda';
 import * as kinesisfirehose from '@aws-cdk/aws-kinesisfirehose';
 import * as s3 from '@aws-cdk/aws-s3';
 import * as s3deploy from '@aws-cdk/aws-s3-deployment';
+import * as sfn from '@aws-cdk/aws-stepfunctions';
+import * as tasks from '@aws-cdk/aws-stepfunctions-tasks';
 
 import {TWEETS_TABLE_COLUMNS, TWEETS_TABLE_PARTITION_KEYS} from "./glue-table-meta"
 
@@ -24,13 +26,13 @@ export class InfrastructureStack extends cdk.Stack {
     super(scope, id, props);
 
     // S3 bucket for Tweets
-    const destinationS3Bucket = new s3.Bucket(this, 'DestinationBucket', {
+    const destinationS3Bucket = new s3.Bucket(this, 'twitter-stream-destination-bucket', {
       bucketName: infrastructureProps.baseStackName + '-raw',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     // Kinesis delivery
-    const streamDeliveryRole = new iam.Role(this, 'DeliveryRole', {
+    const streamDeliveryRole = new iam.Role(this, 'twitter-stream-delivery-role', {
       assumedBy: new iam.ServicePrincipal('firehose.amazonaws.com'),
       inlinePolicies: {
         "root": new iam.PolicyDocument({
@@ -150,7 +152,7 @@ export class InfrastructureStack extends cdk.Stack {
 
     // Glue
 
-    const jobArtifactsS3Bucket = new s3.Bucket(this, 'jobArtifactsBucket', {
+    const jobArtifactsS3Bucket = new s3.Bucket(this, 'twitter-glue-job-artifact-bucket', {
       bucketName: infrastructureProps.baseStackName + '-artifacts',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -166,7 +168,7 @@ export class InfrastructureStack extends cdk.Stack {
       databaseName: infrastructureProps.glueDatabaseName
     });
 
-    const tweetsCleanS3Bucket = new s3.Bucket(this, 'DestinationBucket', {
+    const tweetsCleanS3Bucket = new s3.Bucket(this, 'twitter-clean-bucket', {
       bucketName: infrastructureProps.baseStackName + '-cleaned',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -263,23 +265,23 @@ export class InfrastructureStack extends cdk.Stack {
      
 
     // Crawler
-    const crawlerRole = new iam.Role(this, 'twitter-crawler-role', {
+    const glueCrawlerRole = new iam.Role(this, 'twitter-crawler-role', {
       assumedBy: new iam.ServicePrincipal('glue.amazonaws.com'),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSGlueServiceRole")
       ]
     });
 
-    crawlerRole.addToPolicy(new iam.PolicyStatement({
+    glueCrawlerRole.addToPolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["s3:GetObject", "s3:PutObject"],
       resources: [`${glueTable.bucket.bucketArn}/*`]
     }));
 
-    const crawlerName = `${glueDatabase.databaseName}-crawler`
-    const crawler = new glue.CfnCrawler(this, 'twitter-crawler', {
-      name: crawlerName,
-      role: crawlerRole.roleArn,
+    const glueCrawlerName = `${glueDatabase.databaseName}-crawler`
+    const glueCrawler = new glue.CfnCrawler(this, 'twitter-crawler', {
+      name: glueCrawlerName,
+      role: glueCrawlerRole.roleArn,
       targets: {
         catalogTargets: [
           {
@@ -294,6 +296,62 @@ export class InfrastructureStack extends cdk.Stack {
       },
       configuration: "{\"Version\":1.0,\"CrawlerOutput\":{\"Partitions\":{\"AddOrUpdateBehavior\":\"InheritFromTable\"}},\"Grouping\":{\"TableGroupingPolicy\":\"CombineCompatibleSchemas\"}}"
     });
+
+    const glueJobTask = new tasks.GlueStartJobRun(this, 'twitter-glue-job-task', {
+      glueJobName: glueJob?.name || this.stackName,
+      integrationPattern: sfn.IntegrationPattern.RUN_JOB,
+    });
+
+    const glueCrawlerStartLambda = new lambda.Function(this, 'twitter-glue-crawler-start-lambda', {
+      functionName: `${this.stackName}-glue-crawler-start-lambda`,
+      runtime: lambda.Runtime.NODEJS_12_X,
+      handler: 'index.handler',
+      code: lambda.Code.fromInline(`
+        var glue = require('aws-sdk/clients/glue');
+        
+        exports.handler = function(event, ctx, cb) {
+          var client = new AWS.Glue();
+          var params = {
+            Name: '${glueCrawler.name}' 
+          };
+          client.startCrawler(params, function(err, data) {
+            if (err) console.log(err, err.stack); // an error occurred
+            else     console.log(data);           // successful response
+          });
+        }
+      `),
+    });
+
+    const glueCrawlerArn = cdk.Stack.of(this).formatArn({
+      service: 'glue',
+      resource: 'crawler',
+      sep: ':',
+      resourceName: glueCrawler.name
+    });
+
+    glueCrawlerStartLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "glue:GetCrawler",
+        "glue:GetCrawlers",
+        "glue:ListCrawlers",
+        "glue:StartCrawler",
+      ],
+      resources: [
+        glueCrawlerArn,
+      ],
+    }));
+
+    const glueCrawlerStartTask = new tasks.LambdaInvoke(this, 'twitter-glue-crawler-start-task', {
+      lambdaFunction: glueCrawlerStartLambda,
+    });
+
+    const definition = glueJobTask.next(glueCrawlerStartTask);
+
+    const sm = new sfn.StateMachine(this, 'twitter-state-machine', {
+        stateMachineName: this.stackName,
+        definition: definition
+    });
+
 
   }
 }
